@@ -1,32 +1,9 @@
 import argparse
 import os
 import sys
-from autovideo.config import Config, LLMConfig, ImageConfig, TTSConfig, VideoConfig, PipelineConfig
+
+from autovideo.config import Config, load_config
 from autovideo.core.pipeline import VideoPipeline
-
-
-DEFAULT_CONFIG = Config()
-
-
-def load_config(path: str) -> Config:
-    import yaml
-    if not os.path.exists(path):
-        return Config.from_env()
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    llm_data = data.get("llm", {})
-    image_data = data.get("image", {})
-    tts_data = data.get("tts", {})
-    video_data = data.get("video", {})
-    pipeline_data = data.get("pipeline", {})
-    config = Config(
-        llm=LLMConfig(**{k: v for k, v in llm_data.items() if k in LLMConfig.__dataclass_fields__}),
-        image=ImageConfig(**{k: v for k, v in image_data.items() if k in ImageConfig.__dataclass_fields__}),
-        tts=TTSConfig(**{k: v for k, v in tts_data.items() if k in TTSConfig.__dataclass_fields__}),
-        video=VideoConfig(**{k: v for k, v in video_data.items() if k in VideoConfig.__dataclass_fields__}),
-        pipeline=PipelineConfig(**{k: v for k, v in pipeline_data.items() if k in PipelineConfig.__dataclass_fields__}),
-    )
-    return config
 
 
 def main():
@@ -45,6 +22,9 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    if not config.llm.api_key:
+        config = Config.from_env()
 
     if args.voice:
         config.tts.voice = args.voice

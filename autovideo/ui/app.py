@@ -1,34 +1,11 @@
-import gradio as gr
 import os
-import threading
-from autovideo.config import Config, LLMConfig, ImageConfig, TTSConfig, VideoConfig, PipelineConfig
+
+import gradio as gr
+
+from autovideo.config import Config, load_config, DEFAULT_CONFIG
+from autovideo.core.models import SceneStatus
 from autovideo.core.pipeline import VideoPipeline
-from autovideo.core.models import VideoProject
 from autovideo.core.script_generator import ScriptGenerator
-
-
-DEFAULT_CONFIG = Config()
-
-
-def load_config(path: str) -> Config:
-    import yaml
-    if not os.path.exists(path):
-        return Config.from_env()
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    llm_data = data.get("llm", {})
-    image_data = data.get("image", {})
-    tts_data = data.get("tts", {})
-    video_data = data.get("video", {})
-    pipeline_data = data.get("pipeline", {})
-    config = Config(
-        llm=LLMConfig(**{k: v for k, v in llm_data.items() if k in LLMConfig.__dataclass_fields__}),
-        image=ImageConfig(**{k: v for k, v in image_data.items() if k in ImageConfig.__dataclass_fields__}),
-        tts=TTSConfig(**{k: v for k, v in tts_data.items() if k in TTSConfig.__dataclass_fields__}),
-        video=VideoConfig(**{k: v for k, v in video_data.items() if k in VideoConfig.__dataclass_fields__}),
-        pipeline=PipelineConfig(**{k: v for k, v in pipeline_data.items() if k in PipelineConfig.__dataclass_fields__}),
-    )
-    return config
 
 
 class AutoVideoApp:
@@ -39,7 +16,9 @@ class AutoVideoApp:
         self.progress_text = ""
         self.is_running = False
 
-    def generate_video(self, text, title, max_scenes, voice, image_size, progress=gr.Progress()):
+    def generate_video(
+        self, text, title, max_scenes, voice, image_size, progress=gr.Progress()
+    ):
         if not text or not text.strip():
             return None, "请输入文字内容"
 
@@ -54,13 +33,17 @@ class AutoVideoApp:
 
         self.pipeline = VideoPipeline(self.config)
 
-        output_dir = os.path.join("./output", title.strip() if title.strip() else "untitled")
+        output_dir = os.path.join(
+            "./output", title.strip() if title.strip() else "untitled"
+        )
 
         try:
             progress(0.0, desc="正在生成视频脚本...")
             self.progress_text += "📋 正在生成视频脚本...\n"
 
-            project = self.pipeline.script_generator.generate(text, max_scenes=int(max_scenes))
+            project = self.pipeline.script_generator.generate(
+                text, max_scenes=int(max_scenes)
+            )
             if title and title.strip():
                 project.title = title.strip()
             self.current_project = project
@@ -69,24 +52,33 @@ class AutoVideoApp:
             progress(0.25, desc="正在生成场景图片...")
 
             images_dir = os.path.join(output_dir, "images")
-            project.scenes = self.pipeline.image_generator.generate_batch(project.scenes, images_dir)
+            project.scenes = self.pipeline.image_generator.generate_batch(
+                project.scenes, images_dir
+            )
             done_count = sum(1 for s in project.scenes if s.image_path)
-            self.progress_text += f"🖼️ 已生成 {done_count}/{len(project.scenes)} 张图片\n"
+            self.progress_text += (
+                f"🖼️ 已生成 {done_count}/{len(project.scenes)} 张图片\n"
+            )
             progress(0.5, desc="正在合成语音...")
 
             audio_dir = os.path.join(output_dir, "audio")
-            project.scenes = self.pipeline.tts_engine.synthesize_batch(project.scenes, audio_dir)
+            project.scenes = self.pipeline.tts_engine.synthesize_batch(
+                project.scenes, audio_dir
+            )
             done_count = sum(1 for s in project.scenes if s.audio_path)
-            self.progress_text += f"🔊 已合成 {done_count}/{len(project.scenes)} 段语音\n"
+            self.progress_text += (
+                f"🔊 已合成 {done_count}/{len(project.scenes)} 段语音\n"
+            )
             progress(0.75, desc="正在合成视频...")
 
-            from autovideo.core.models import SceneStatus
             scenes_dir = os.path.join(output_dir, "scenes")
             for scene in project.scenes:
                 if scene.status == SceneStatus.AUDIO_DONE:
                     scene_video_path = os.path.join(scenes_dir, f"scene_{scene.id}.mp4")
                     try:
-                        self.pipeline.video_composer.compose_scene(scene, scene_video_path)
+                        self.pipeline.video_composer.compose_scene(
+                            scene, scene_video_path
+                        )
                     except Exception as e:
                         scene.status = SceneStatus.FAILED
                         self.progress_text += f"⚠️ 场景 {scene.id} 合成失败: {e}\n"
@@ -111,7 +103,9 @@ class AutoVideoApp:
             return "请输入文字内容"
 
         try:
-            project = self.pipeline.script_generator.generate(text, max_scenes=int(max_scenes))
+            project = self.pipeline.script_generator.generate(
+                text, max_scenes=int(max_scenes)
+            )
 
             md = f"## 📋 脚本预览 ({len(project.scenes)} 个场景)\n\n"
             md += "| # | 场景标题 | 旁白 | 图片提示词 |\n"
@@ -130,38 +124,64 @@ class AutoVideoApp:
 
     def create_ui(self):
         with gr.Blocks(title="AutoVideo - AI视频生成器", theme=gr.themes.Soft()) as app:
-            gr.Markdown("# 🎬 AutoVideo - AI文字转长视频\n输入文字内容，AI自动生成完整视频")
+            gr.Markdown(
+                "# 🎬 AutoVideo - AI文字转长视频\n输入文字内容，AI自动生成完整视频"
+            )
 
             with gr.Row():
                 with gr.Column(scale=2):
-                    text_input = gr.Textbox(label="📝 输入文字内容", lines=10, placeholder="输入你想生成视频的文字内容...")
-                    title_input = gr.Textbox(label="🎬 视频标题", placeholder="可选，留空则自动生成")
+                    text_input = gr.Textbox(
+                        label="📝 输入文字内容",
+                        lines=10,
+                        placeholder="输入你想生成视频的文字内容...",
+                    )
+                    title_input = gr.Textbox(
+                        label="🎬 视频标题", placeholder="可选，留空则自动生成"
+                    )
 
                     with gr.Row():
-                        max_scenes = gr.Slider(3, 50, value=10, step=1, label="场景数量")
+                        max_scenes = gr.Slider(
+                            3, 50, value=10, step=1, label="场景数量"
+                        )
                         voice = gr.Dropdown(
-                            choices=["zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural", "en-US-AndrewNeural", "en-US-AriaNeural"],
+                            choices=[
+                                "zh-CN-YunxiNeural",
+                                "zh-CN-XiaoxiaoNeural",
+                                "zh-CN-YunjianNeural",
+                                "en-US-AndrewNeural",
+                                "en-US-AriaNeural",
+                            ],
                             value="zh-CN-YunxiNeural",
-                            label="🔊 语音"
+                            label="🔊 语音",
                         )
                         image_size = gr.Dropdown(
                             choices=["1792x1024", "1024x1792", "1024x1024"],
                             value="1792x1024",
-                            label="🖼️ 图片尺寸"
+                            label="🖼️ 图片尺寸",
                         )
 
                     with gr.Row():
                         preview_btn = gr.Button("📋 预览脚本", variant="secondary")
                         generate_btn = gr.Button("🚀 生成视频", variant="primary")
 
-                    progress_output = gr.Textbox(label="📊 进度", lines=5, interactive=False)
+                    progress_output = gr.Textbox(
+                        label="📊 进度", lines=5, interactive=False
+                    )
 
                 with gr.Column(scale=1):
                     script_preview = gr.Markdown(label="脚本预览")
                     video_output = gr.Video(label="🎬 生成结果")
 
-            preview_btn.click(fn=self.preview_script, inputs=[text_input, max_scenes], outputs=[script_preview])
-            generate_btn.click(fn=self.generate_video, inputs=[text_input, title_input, max_scenes, voice, image_size], outputs=[video_output, progress_output])
+            preview_btn.click(
+                fn=self.preview_script,
+                inputs=[text_input, max_scenes],
+                outputs=[script_preview],
+            )
+            generate_btn.click(
+                fn=self.generate_video,
+                inputs=[text_input, title_input, max_scenes, voice, image_size],
+                outputs=[video_output, progress_output],
+            )
 
         return app
 

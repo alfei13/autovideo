@@ -1,12 +1,14 @@
 import os
 
+import numpy as np
 from moviepy import (
     AudioFileClip,
     CompositeVideoClip,
-    ImageClip,
-    concatenate_videoclips,
     CompositeAudioClip,
+    ImageClip,
+    VideoClip,
     VideoFileClip,
+    concatenate_videoclips,
 )
 from PIL import Image
 
@@ -67,8 +69,14 @@ class VideoComposer:
             self.config.video.background_music_path
         ):
             bg_music = AudioFileClip(self.config.video.background_music_path)
+            vol = self.config.video.background_music_volume
+            original_array = bg_music.to_soundarray(fps=bg_music.fps)
             bg_music = bg_music.with_effects(
-                [lambda c: c.volume_multiply(self.config.video.background_music_volume)]
+                [lambda c: c.with_audio(
+                    c.audio.with_effects(
+                        [lambda a: a.transform(lambda t, arr: arr * vol)]
+                    )
+                )]
             )
             if bg_music.duration < final.duration:
                 bg_music = bg_music.loop(duration=final.duration)
@@ -84,37 +92,27 @@ class VideoComposer:
         return output_path
 
     def _add_ken_burns(self, clip, duration: float):
-        zoom_start, zoom_end = self.config.video.ken_burns_zoom_range
+        zoom_start = self.config.video.ken_burns_zoom_start
+        zoom_end = self.config.video.ken_burns_zoom_end
         target_w, target_h = self.config.video.resolution
-        large_w = int(target_w * zoom_end)
-        large_h = int(target_h * zoom_end)
 
         def make_frame(t):
             progress = t / duration
             zoom = zoom_start + (zoom_end - zoom_start) * progress
             current_w = int(target_w * zoom)
             current_h = int(target_h * zoom)
-            x_offset = (large_w - current_w) // 2
-            y_offset = (large_h - current_h) // 2
             frame = clip.get_frame(t)
-            from PIL import Image as PILImage
-            import numpy as np
-
-            pil_img = PILImage.fromarray(frame)
-            pil_img = pil_img.resize((current_w, current_h), PILImage.LANCZOS)
-            canvas = PILImage.new("RGB", (target_w, target_h))
+            pil_img = Image.fromarray(frame)
+            pil_img = pil_img.resize((current_w, current_h), Image.LANCZOS)
+            canvas = Image.new("RGB", (target_w, target_h))
             paste_x = (target_w - current_w) // 2
             paste_y = (target_h - current_h) // 2
             canvas.paste(pil_img, (paste_x, paste_y))
             return np.array(canvas)
 
-        from moviepy import VideoClip
-
         return VideoClip(make_frame, duration=duration).with_fps(clip.fps or self.config.video.fps)
 
     def _add_transition(self, clips: list, transition_duration: float):
-        from moviepy import CompositeVideoClip
-
         fps = self.config.video.fps
         sequence = []
         for i, clip in enumerate(clips):
@@ -139,8 +137,6 @@ class VideoComposer:
                         frame = clip.get_frame(frame_t)
                     except Exception:
                         continue
-                    import numpy as np
-
                     if i > 0 and t < clip.start + transition_duration:
                         progress = (t - clip.start) / transition_duration
                         prev_clip = sequence[i - 1]
@@ -156,8 +152,6 @@ class VideoComposer:
                         return blended.astype(np.uint8)
                     return frame
             return clips[0].get_frame(0)
-
-        from moviepy import VideoClip
 
         final = VideoClip(make_frame, duration=total_duration).with_fps(fps)
         audio_clips = []
