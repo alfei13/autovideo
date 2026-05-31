@@ -3,8 +3,8 @@ import os
 import numpy as np
 from moviepy import (
     AudioFileClip,
-    CompositeVideoClip,
     CompositeAudioClip,
+    CompositeVideoClip,
     ImageClip,
     VideoClip,
     VideoFileClip,
@@ -26,23 +26,17 @@ class VideoComposer:
         fps = self.config.video.fps
         target_w, target_h = self.config.video.resolution
 
-        img = Image.open(scene.image_path)
+        img = Image.open(scene.image_path).convert("RGB")
         img = img.resize((target_w, target_h), Image.LANCZOS)
-        temp_img_path = output_path.replace(".mp4", "_resized.png")
-        img.save(temp_img_path)
+        img_array = np.array(img)
 
-        clip = ImageClip(temp_img_path, duration=duration)
-        clip = self._add_ken_burns(clip, duration)
+        clip = self._add_ken_burns(img_array, duration, fps)
 
         if scene.audio_path and os.path.exists(scene.audio_path):
             audio = AudioFileClip(scene.audio_path)
             clip = clip.with_audio(audio)
 
-        clip = clip.with_fps(fps)
         clip.write_videofile(output_path, codec="libx264", audio_codec="aac", logger=None)
-
-        if os.path.exists(temp_img_path):
-            os.remove(temp_img_path)
 
         scene.video_path = output_path
         scene.status = SceneStatus.VIDEO_DONE
@@ -70,18 +64,14 @@ class VideoComposer:
         ):
             bg_music = AudioFileClip(self.config.video.background_music_path)
             vol = self.config.video.background_music_volume
-            original_array = bg_music.to_soundarray(fps=bg_music.fps)
-            bg_music = bg_music.with_effects(
-                [lambda c: c.with_audio(
-                    c.audio.with_effects(
-                        [lambda a: a.transform(lambda t, arr: arr * vol)]
-                    )
-                )]
-            )
             if bg_music.duration < final.duration:
                 bg_music = bg_music.loop(duration=final.duration)
             else:
                 bg_music = bg_music.subclipped(0, final.duration)
+            bg_music_array = bg_music.to_soundarray(fps=bg_music.fps)
+            bg_music_array = bg_music_array * vol
+            from moviepy import AudioClip
+            bg_music = AudioClip(lambda t: bg_music_array, duration=bg_music.duration, fps=bg_music.fps)
             if final.audio is not None:
                 final_audio = CompositeAudioClip([final.audio, bg_music])
                 final = final.with_audio(final_audio)
@@ -91,18 +81,17 @@ class VideoComposer:
         final.write_videofile(output_path, codec="libx264", audio_codec="aac", logger=None)
         return output_path
 
-    def _add_ken_burns(self, clip, duration: float):
+    def _add_ken_burns(self, img_array: np.ndarray, duration: float, fps: int) -> VideoClip:
         zoom_start = self.config.video.ken_burns_zoom_start
         zoom_end = self.config.video.ken_burns_zoom_end
-        target_w, target_h = self.config.video.resolution
+        target_h, target_w = img_array.shape[:2]
 
         def make_frame(t):
             progress = t / duration
             zoom = zoom_start + (zoom_end - zoom_start) * progress
             current_w = int(target_w * zoom)
             current_h = int(target_h * zoom)
-            frame = clip.get_frame(t)
-            pil_img = Image.fromarray(frame)
+            pil_img = Image.fromarray(img_array)
             pil_img = pil_img.resize((current_w, current_h), Image.LANCZOS)
             canvas = Image.new("RGB", (target_w, target_h))
             paste_x = (target_w - current_w) // 2
@@ -110,9 +99,9 @@ class VideoComposer:
             canvas.paste(pil_img, (paste_x, paste_y))
             return np.array(canvas)
 
-        return VideoClip(make_frame, duration=duration).with_fps(clip.fps or self.config.video.fps)
+        return VideoClip(make_frame, duration=duration).with_fps(fps)
 
-    def _add_transition(self, clips: list, transition_duration: float):
+    def _add_transition(self, clips: list, transition_duration: float) -> VideoClip:
         fps = self.config.video.fps
         sequence = []
         for i, clip in enumerate(clips):
@@ -124,7 +113,6 @@ class VideoComposer:
                 sequence.append(offset_clip)
 
         total_duration = sequence[-1].end
-        target_w, target_h = self.config.video.resolution
 
         def make_frame(t):
             for i in range(len(sequence) - 1, -1, -1):
