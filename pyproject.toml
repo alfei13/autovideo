@@ -1,0 +1,24 @@
+[project]
+name = "autovideo"
+version = "0.1.0"
+description = "AI-powered text to long video generator"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0",
+    "edge-tts>=6.1",
+    "moviepy>=1.0",
+    "pillow>=10.0",
+    "pyyaml>=6.0",
+    "gradio>=4.0",
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
+    "httpx>=0.24",
+    "aiofiles>=23.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+
+[project.scripts]
+autovideo = "autovideo.cli:main"
