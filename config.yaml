@@ -1,17 +1,19 @@
 llm:
-  model: gpt-4o
-  api_base: https://api.openai.com/v1
-  api_key_env: OPENAI_API_KEY
+  api_key_env: DASHSCOPE_API_KEY
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  model: qwen-plus
   max_tokens: 4096
+  temperature: 0.7
 
 image:
-  provider: openai
-  model: dall-e-3
-  size: 1792x1024
-  quality: hd
+  provider: dashscope
+  api_key_env: DASHSCOPE_API_KEY
+  model: wanx-v1
+  size: "1024*1024"
+  n: 1
+  style: "<auto>"
 
 tts:
-  provider: edge-tts
   voice: zh-CN-YunxiNeural
   rate: "+0%"
   volume: "+0%"
@@ -22,13 +24,11 @@ video:
     width: 1920
     height: 1080
   transition_duration: 1.0
-  image_duration: 5.0
-  output_format: mp4
-  codec: libx264
-  audio_codec: aac
+  ken_burns_zoom_start: 1.0
+  ken_burns_zoom_end: 1.15
 
 pipeline:
-  max_scenes: 50
-  scene_overlap: 0.5
   concurrent_images: 3
-  retry_attempts: 3
+  max_retries: 3
+  retry_delay: 2.0
+  max_scenes: 20

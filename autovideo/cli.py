@@ -2,6 +2,10 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from autovideo.config import Config, load_config
 from autovideo.core.pipeline import VideoPipeline
 
@@ -12,9 +16,13 @@ def main():
     parser.add_argument("--text-file", type=str, help="从文件读取文字内容")
     parser.add_argument("--title", type=str, default="", help="视频标题")
     parser.add_argument("--output", type=str, default="./output", help="输出目录")
-    parser.add_argument("--config", type=str, default="config.yaml", help="配置文件路径")
+    parser.add_argument(
+        "--config", type=str, default="config.yaml", help="配置文件路径"
+    )
     parser.add_argument("--max-scenes", type=int, default=10, help="最大场景数")
-    parser.add_argument("--voice", type=str, default="zh-CN-YunxiNeural", help="TTS语音")
+    parser.add_argument(
+        "--voice", type=str, default="zh-CN-YunxiNeural", help="TTS语音"
+    )
     parser.add_argument("--web", action="store_true", help="启动Web界面")
     parser.add_argument("--port", type=int, default=7860, help="Web界面端口")
     parser.add_argument("--share", action="store_true", help="创建公开分享链接")
@@ -31,6 +39,7 @@ def main():
 
     if args.web:
         from autovideo.ui.app import AutoVideoApp
+
         app = AutoVideoApp(config)
         app.launch(share=args.share, server_port=args.port)
         return
@@ -44,7 +53,9 @@ def main():
             text = f.read().strip()
 
     if not text:
-        print("错误: 请通过 --text 或 --text-file 提供文字内容，或使用 --web 启动Web界面")
+        print(
+            "错误: 请通过 --text 或 --text-file 提供文字内容，或使用 --web 启动Web界面"
+        )
         parser.print_help()
         sys.exit(1)
 

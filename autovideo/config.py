@@ -8,18 +8,20 @@ import yaml
 @dataclass
 class LLMConfig:
     api_key: str = ""
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o"
+    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    model: str = "qwen-plus"
     max_tokens: int = 4096
     temperature: float = 0.7
 
 
 @dataclass
 class ImageConfig:
-    model: str = "dall-e-3"
-    size: str = "1792x1024"
-    quality: str = "standard"
-    style: str = "vivid"
+    provider: str = "dashscope"
+    api_key: str = ""
+    model: str = "wanx-v1"
+    size: str = "1024*1024"
+    n: int = 1
+    style: str = "<auto>"
 
 
 @dataclass
@@ -64,9 +66,12 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         config = cls()
-        config.llm.api_key = os.getenv("OPENAI_API_KEY", "")
-        config.llm.base_url = os.getenv("OPENAI_BASE_URL", config.llm.base_url)
-        config.llm.model = os.getenv("OPENAI_MODEL", config.llm.model)
+        dashscope_key = os.getenv("DASHSCOPE_API_KEY", "")
+        config.llm.api_key = dashscope_key
+        config.llm.base_url = os.getenv("LLM_BASE_URL", config.llm.base_url)
+        config.llm.model = os.getenv("LLM_MODEL", config.llm.model)
+        config.image.api_key = dashscope_key
+        config.image.model = os.getenv("IMAGE_MODEL", config.image.model)
         config.tts.voice = os.getenv("EDGE_TTS_VOICE", config.tts.voice)
         return config
 
@@ -86,9 +91,19 @@ def load_config(path: str) -> Config:
     video_data = data.get("video", {})
     pipeline_data = data.get("pipeline", {})
 
-    api_key_env = llm_data.pop("api_key_env", None)
-    if api_key_env:
-        llm_data["api_key"] = os.getenv(api_key_env, "")
+    dashscope_key = os.getenv("DASHSCOPE_API_KEY", "")
+
+    llm_api_key_env = llm_data.pop("api_key_env", None)
+    if llm_api_key_env:
+        llm_data["api_key"] = os.getenv(llm_api_key_env, dashscope_key)
+    elif dashscope_key:
+        llm_data["api_key"] = dashscope_key
+
+    image_api_key_env = image_data.pop("api_key_env", None)
+    if image_api_key_env:
+        image_data["api_key"] = os.getenv(image_api_key_env, dashscope_key)
+    elif dashscope_key:
+        image_data["api_key"] = dashscope_key
 
     if "resolution" in video_data:
         res = video_data.pop("resolution")
